@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import Optional
 
-from database import get_db
-from models import User, AuditLog
-from schemas import UserCreate, UserOut, Token
-from auth import (
+from backend.database import get_db
+from backend.models import User, AuditLog
+from backend.schemas import UserCreate, UserOut, Token
+from backend.auth import (
     verify_password, get_password_hash, create_access_token,
     get_current_user, require_role, ACCESS_TOKEN_EXPIRE_MINUTES
 )

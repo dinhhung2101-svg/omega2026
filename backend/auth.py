@@ -10,8 +10,8 @@ import bcrypt
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from database import get_db
-from models import User
+from backend.database import get_db
+from backend.models import User
 
 # Cấu hình JWT — đọc từ env var nếu có (production), fallback sang key mặc định
 SECRET_KEY = os.environ.get("SECRET_KEY", "restaurant-booking-secret-key-2024-change-in-production")

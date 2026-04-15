@@ -6,10 +6,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
 
-from database import get_db
-from models import Area, Table, User, AuditLog, TableBlock
-from schemas import AreaCreate, AreaUpdate, AreaOut, TableCreate, TableUpdate, TableOut
-from auth import get_current_user, require_role
+from backend.database import get_db
+from backend.models import Area, Table, User, AuditLog, TableBlock
+from backend.schemas import AreaCreate, AreaUpdate, AreaOut, TableCreate, TableUpdate, TableOut
+from backend.auth import get_current_user, require_role
 
 router = APIRouter(prefix="/api", tags=["🪑 Tables & Areas"])
 

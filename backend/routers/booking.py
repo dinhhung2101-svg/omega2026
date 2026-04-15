@@ -10,10 +10,10 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from typing import Optional
 
-from database import get_db
-from models import Table, Booking, Customer, User, VisitHistory, AuditLog, Area, TableBlock
-from schemas import BookingCreate, BookingUpdate, BookingOut, MergeTables, TransferTable
-from auth import get_current_user, require_role
+from backend.database import get_db
+from backend.models import Table, Booking, Customer, User, VisitHistory, AuditLog, Area, TableBlock
+from backend.schemas import BookingCreate, BookingUpdate, BookingOut, MergeTables, TransferTable
+from backend.auth import get_current_user, require_role
 from datetime import time as time_type
 
 router = APIRouter(prefix="/api/bookings", tags=["📋 Booking"])
@@ -262,11 +262,11 @@ def create_booking(
          f"Đặt bàn '{table.name}' (gộp {len(merged_tables)} bàn) cho '{booking.customer_name}' ({booking.customer_phone}), {booking.guest_count} khách, giờ: {booking.booking_time}")
 
     # Broadcast thay đổi
-    from main import event_store
+    from backend.events import event_store as _es
     tables_changed = [_table_out(table)]
     for mtable in merged_tables:
         tables_changed.append(_table_out(mtable))
-    event_store.broadcast({"type": "table_update", "tables": tables_changed})
+    _es.broadcast({"type": "table_update", "tables": tables_changed})
 
     # Trả về booking kèm danh sách bàn gộp
     out = _booking_out(booking)
@@ -368,11 +368,11 @@ def check_in_booking(
          f"Khách '{booking.customer_name}' đến, ngồi bàn '{table.name}'" +
          (f" (gộp {len(merged_tables)} bàn)" if is_merged_booking else ""))
 
-    from main import event_store
+    from backend.events import event_store as _es
     tables_changed = [_table_out(table)]
     for mtable in merged_tables:
         tables_changed.append(_table_out(mtable))
-    event_store.broadcast({"type": "table_update", "tables": tables_changed})
+    _es.broadcast({"type": "table_update", "tables": tables_changed})
 
     out = _booking_out(booking)
     out.merged_table_ids = [t.id for t in merged_tables]
@@ -448,8 +448,8 @@ def walk_in_booking(
 
     _log(db, current_user.id, "Mở bàn (walk-in)", f"Mở bàn '{table.name}' cho '{req.customer_name}', {req.guest_count} khách")
 
-    from main import event_store
-    event_store.broadcast({"type": "table_update", "tables": [_table_out(table)]})
+    from backend.events import event_store as _es
+    _es.broadcast({"type": "table_update", "tables": [_table_out(table)]})
 
     return _booking_out(booking)
 
@@ -528,11 +528,11 @@ def close_booking(
          f"Đóng bàn '{table.name}' của '{booking.customer_name}', doanh thu: {req.total_amount:,}đ" +
          (f" (gộp {len(merged_tables)} bàn)" if was_merged else ""))
 
-    from main import event_store
+    from backend.events import event_store as _es
     tables_changed = [_table_out(table)]
     for mtable in merged_tables:
         tables_changed.append(_table_out(mtable))
-    event_store.broadcast({"type": "table_update", "tables": tables_changed})
+    _es.broadcast({"type": "table_update", "tables": tables_changed})
 
     out = _booking_out(booking)
     out.merged_table_ids = [t.id for t in merged_tables]
@@ -580,11 +580,11 @@ def cancel_booking(
     _log(db, current_user.id, "Hủy booking",
          f"Hủy booking #{booking.id} của '{booking.customer_name}' - Lý do: {req.reason or 'Không rõ'}")
 
-    from main import event_store
+    from backend.events import event_store as _es
     tables_changed = [_table_out(table)]
     for mtable in merged_tables:
         tables_changed.append(_table_out(mtable))
-    event_store.broadcast({"type": "table_update", "tables": tables_changed})
+    _es.broadcast({"type": "table_update", "tables": tables_changed})
 
     return {"message": "Đã hủy booking"}
 
@@ -625,8 +625,8 @@ def merge_tables(
     _log(db, current_user.id, "Gộp bàn",
          f"Gộp bàn trống '{from_table.name}' vào '{to_table.name}'")
 
-    from main import event_store
-    event_store.broadcast({
+    from backend.events import event_store as _es
+    _es.broadcast({
         "type": "table_update",
         "tables": [_table_out(from_table), _table_out(to_table)]
     })
@@ -694,8 +694,8 @@ def transfer_table(
     _log(db, current_user.id, "Chuyển bàn",
          f"Chuyển khách từ bàn '{from_table.name}' sang bàn '{to_table.name}'")
 
-    from main import event_store
-    event_store.broadcast({
+    from backend.events import event_store as _es
+    _es.broadcast({
         "type": "table_update",
         "tables": [_table_out(from_table), _table_out(to_table)]
     })
@@ -773,11 +773,11 @@ def unmerge_table(
     _log(db, current_user.id, "Tách bàn",
          f"Tách bàn '{new_table.name}' từ bàn ghép '{merged_table.name}', {req.guest_count} khách")
 
-    from main import event_store
+    from backend.events import event_store as _es
     tables_updated = [_table_out(merged_table), _table_out(new_table)]
     if merged_from:
         tables_updated.append(_table_out(merged_from))
-    event_store.broadcast({
+    _es.broadcast({
         "type": "table_update",
         "tables": tables_updated
     })

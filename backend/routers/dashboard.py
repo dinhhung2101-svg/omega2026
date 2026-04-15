@@ -6,10 +6,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
 from typing import List
 from datetime import datetime, timedelta, timezone
-from database import get_db
-from models import Booking, VisitHistory, User, AuditLog, Table, Area
-from schemas import DailyStats, StaffPerformance, AuditLogOut
-from auth import get_current_user, require_role
+from backend.database import get_db
+from backend.models import Booking, VisitHistory, User, AuditLog, Table, Area, Customer
+from backend.schemas import DailyStats, StaffPerformance, AuditLogOut
+from backend.auth import get_current_user, require_role
 
 router = APIRouter(prefix="/api/dashboard", tags=["📊 Dashboard"])
 

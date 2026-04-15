@@ -9,10 +9,10 @@ from typing import List, Optional
 from datetime import date as date_type, datetime, time as time_type, timezone
 from pydantic import BaseModel
 
-from database import get_db
-from models import TableBlock, Table, Area, User, AuditLog
-from schemas import TableBlockCreate, TableBlockOut
-from auth import get_current_user, require_role
+from backend.database import get_db
+from backend.models import TableBlock, Table, Area, User, AuditLog
+from backend.schemas import TableBlockCreate, TableBlockOut
+from backend.auth import get_current_user, require_role
 
 router = APIRouter(prefix="/api/blocks", tags=["🔒 Khóa Bàn"])
 

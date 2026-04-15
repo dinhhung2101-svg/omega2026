@@ -5,10 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
-from database import get_db
-from models import Customer, VisitHistory, User, AuditLog
-from schemas import CustomerCreate, CustomerUpdate, CustomerOut
-from auth import get_current_user, require_role
+from backend.database import get_db
+from backend.models import Customer, VisitHistory, User, AuditLog
+from backend.schemas import CustomerCreate, CustomerUpdate, CustomerOut
+from backend.auth import get_current_user, require_role
 
 router = APIRouter(prefix="/api/crm", tags=["👥 CRM"])
 
