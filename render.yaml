@@ -1,15 +1,37 @@
-# Render Blueprint - Deploy backend lên Render (Free tier)
+# render.yaml — Backend deployment trên Render (áp dụng cho branch "main")
+# Deploy: tự động mỗi khi push lên main
+#
+# Cách dùng: Push file này lên branch main → Render nhận diện và deploy
+# Nếu dùng Blueprint: renderctl blueprints apply
+#
 services:
   - type: web
     name: restaurant-booking-api
     runtime: python
-    repo: https://github.com/dinhhung2101-svg/omega2026
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    region: singapore
     plan: free
+
+    # Thư mục gốc cho service này → build/start chạy trong backend/
+    rootDir: backend
+
+    # Build: cài dependencies từ requirements.txt trong backend/
+    buildCommand: pip install -r requirements.txt
+
+    # Start: chạy uvicorn từ thư mục backend/
+    # Backend dùng absolute import (backend.*) nên cần PYTHONPATH=..
+    startCommand: PYTHONPATH=/opt/render/project/src uvicorn main:app --host 0.0.0.0 --port $PORT
+
+    # Health check
+    healthCheckPath: /api/health
+
+    # Auto deploy mỗi khi push lên main
     autoDeploy: true
-    pythonVersion: "3.12"
-    envVars:
-      - key: SECRET_KEY
-        generateValue: true
+
+    # Chỉ deploy khi có thay đổi trong backend/
+    buildFilter:
+      paths:
+        - backend/**
+      ignoredPaths:
+        - "**/*.md"
+        - "**/*.sh"
+        - frontend/**
