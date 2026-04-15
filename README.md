@@ -38,7 +38,35 @@ Một web app hoàn chỉnh để quản lý đặt bàn nhà hàng, CRM khách 
 
 ---
 
-## 🚀 Cách chạy
+## 🚀 Deploy lên Production (Miễn phí)
+
+### Backend → Render
+
+1. Vào [render.com](https://render.com) → Sign up (dùng GitHub) → **"New"** → **"Blueprint"**
+2. Upload file `render.yaml` từ repo hoặc kết nối GitHub repo trực tiếp
+3. Render tự nhận diện Python/FastAPI và deploy
+4. Sau khi deploy xong, copy **URL backend** (ví dụ: `https://restaurant-booking-api.onrender.com`)
+5. Thêm Environment Variable trong Render dashboard:
+   - `FRONTEND_URL` = URL Vercel (sau khi deploy frontend)
+
+### Frontend → Vercel
+
+1. Vào [vercel.com](https://vercel.com) → Sign up (dùng GitHub) → **"Add New Project"**
+2. Import repo `dinhhung2101-svg/omega2026`, chọn thư mục **`frontend`**
+3. Framework Preset: **Vite** (tự nhận)
+4. Thêm Environment Variable:
+   - `VITE_API_URL` = URL Render (ví dụ: `https://restaurant-booking-api.onrender.com`)
+5. Deploy → Copy **URL frontend** (ví dụ: `https://omega2026.vercel.app`)
+6. Quay lại Render → thêm `FRONTEND_URL=https://omega2026.vercel.app`
+
+### Hoàn tất CORS
+
+Sau khi có cả 2 URL, kiểm tra API docs tại:
+`https://restaurant-booking-api.onrender.com/docs`
+
+---
+
+## 🚀 Cách chạy local
 
 ### Cách 1: Script tự động (Khuyến nghị)
 ```bash

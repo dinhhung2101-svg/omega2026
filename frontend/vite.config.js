@@ -5,7 +5,8 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    // Gọi API qua cùng origin (5173) → proxy sang backend → tránh CORS và lỗi Failed to fetch khi mở bằng 127.0.0.1 hoặc IP LAN
+    // Proxy chỉ hoạt động ở dev mode (localhost)
+    // Production: VITE_API_URL được set = URL Render trong .env.production
     proxy: {
       "/api": {
         target: "http://127.0.0.1:8000",
