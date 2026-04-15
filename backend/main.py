@@ -4,6 +4,7 @@ FastAPI Entry Point - Khởi tạo app, database, seed data mặc định.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import os
 
 from database import engine, Base, SessionLocal
 from models import User, Area, Table
