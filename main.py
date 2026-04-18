@@ -15,7 +15,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 # Đảm bảo PYTHONPATH luôn chứa repo root
-if "PYTHONPATH" not in os.environ or _REPO_ROOT not in os.environ["PYTHONPATH"]:
+if "PYTHONPATH" not in os.environ or str(_REPO_ROOT) not in os.environ["PYTHONPATH"]:
     os.environ["PYTHONPATH"] = str(_REPO_ROOT)
 
 from backend.main import app

@@ -8,11 +8,10 @@ services:
     region: singapore
     plan: free
 
-    # Không set rootDir → dùng repo root làm gốc
     # Build: cài dependencies từ backend/requirements.txt
     buildCommand: pip install -r backend/requirements.txt
 
-    # Start: uvicorn chạy từ repo root
+    # Start: uvicorn chạy từ repo root sử dụng main.py wrapper
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
 
     # Health check
@@ -20,15 +19,3 @@ services:
 
     # Auto deploy khi push lên main
     autoDeploy: true
-
-    # Chỉ deploy khi có thay đổi backend thực sự hoặc file gốc
-    buildFilter:
-      paths:
-        - "*.py"
-        - routers/**
-        - backend/requirements.txt
-      ignoredPaths:
-        - "**/*.md"
-        - "**/*.sh"
-        - frontend/**
-        - backend/requirements.txt
