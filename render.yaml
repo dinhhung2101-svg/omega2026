@@ -1,20 +1,13 @@
-# render.yaml — Backend deployment trên Render
+# render.yaml — Backend deployment trên Render (DOCKER)
 # Deploy: tự động mỗi khi push lên main
-#
+
 services:
   - type: web
     name: restaurant-booking-api
-    runtime: python
-    pythonVersion: "3.11"
+    runtime: docker
+    dockerfilePath: ./Dockerfile
     region: singapore
     plan: free
-
-    # Build: cài dependencies từ backend/requirements.txt
-    buildCommand: pip install --only-binary :all: -r backend/requirements.txt
-
-    # Start: uvicorn chạy từ repo root, trỏ trực tiếp vào backend package
-    # PYTHONPATH=. đảm bảo Python tìm thấy module backend/ khi import
-    startCommand: cd /opt/render/project/src && PYTHONPATH=/opt/render/project/src uvicorn backend.main:app --host 0.0.0.0 --port $PORT
 
     # Health check
     healthCheckPath: /api/health
