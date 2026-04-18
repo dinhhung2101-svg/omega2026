@@ -11,8 +11,8 @@ services:
     # Build: cài dependencies từ backend/requirements.txt
     buildCommand: pip install -r backend/requirements.txt
 
-    # Start: uvicorn chạy từ repo root sử dụng main.py wrapper
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    # Start: uvicorn chạy từ repo root, trỏ trực tiếp vào backend package
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
 
     # Health check
     healthCheckPath: /api/health

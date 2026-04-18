@@ -163,4 +163,4 @@ def health_check():
 if __name__ == "__main__":
     import uvicorn
     # host 0.0.0.0: máy khác trong mạng LAN có thể gọi API (đổi API_BASE trên frontend nếu cần)
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)

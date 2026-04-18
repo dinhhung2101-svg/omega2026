@@ -39,7 +39,7 @@ fi
 
 echo ""
 echo "🚀 Đang khởi động backend (http://localhost:8000)..."
-cd "$SCRIPT_DIR" && source backend/venv/bin/activate && python3 -m backend.main &
+cd "$SCRIPT_DIR" && source backend/venv/bin/activate && python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 
 echo "🌐 Đang khởi động frontend (http://localhost:5173)..."
