@@ -39,7 +39,7 @@ fi
 
 echo ""
 echo "🚀 Đang khởi động backend (http://localhost:8000)..."
-cd "$SCRIPT_DIR/backend" && source venv/bin/activate && python main.py &
+cd "$SCRIPT_DIR" && source backend/venv/bin/activate && python3 -m backend.main &
 BACKEND_PID=$!
 
 echo "🌐 Đang khởi động frontend (http://localhost:5173)..."

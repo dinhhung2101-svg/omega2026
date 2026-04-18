@@ -6,20 +6,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
 
-from .database import engine, Base, SessionLocal
-from .models import User, Area, Table
-from .auth import get_password_hash
+from backend.database import engine, Base, SessionLocal
+from backend.models import User, Area, Table
+from backend.auth import get_password_hash
 
 
 # Import routers
-from .events import event_store
-from .routers.auth import router as auth_router
-from .routers.tables import router as tables_router
-from .routers.booking import router as booking_router
-from .routers.crm import router as crm_router
-from .routers.dashboard import router as dashboard_router
-from .routers.events import router as events_router
-from .routers.blocking import router as blocking_router
+from backend.events import event_store
+from backend.routers.auth import router as auth_router
+from backend.routers.tables import router as tables_router
+from backend.routers.booking import router as booking_router
+from backend.routers.crm import router as crm_router
+from backend.routers.dashboard import router as dashboard_router
+from backend.routers.events import router as events_router
+from backend.routers.blocking import router as blocking_router
 
 
 @asynccontextmanager

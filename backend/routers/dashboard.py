@@ -116,7 +116,7 @@ def top_customers(
     current_user: User = Depends(require_role("admin", "manager"))
 ):
     """Top khách hàng VIP (nhiều lần đến nhất)."""
-    from models import Customer
+    from backend.models import Customer
     results = db.query(Customer).order_by(Customer.total_visits.desc()).limit(limit).all()
     return [
         {

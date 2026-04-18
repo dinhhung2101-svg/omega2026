@@ -8,7 +8,7 @@ from sqlalchemy.sql import func
 import enum
 from datetime import date as date_type
 
-from .database import Base
+from backend.database import Base
 
 
 class UserRole(str, enum.Enum):
