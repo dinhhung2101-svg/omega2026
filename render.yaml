@@ -10,7 +10,7 @@ services:
     plan: free
 
     # Build: cài dependencies từ backend/requirements.txt
-    buildCommand: pip install --force-reinstall --no-cache-dir -r backend/requirements.txt
+    buildCommand: pip install --only-binary :all: -r backend/requirements.txt
 
     # Start: uvicorn chạy từ repo root, trỏ trực tiếp vào backend package
     # PYTHONPATH=. đảm bảo Python tìm thấy module backend/ khi import
