@@ -5,6 +5,7 @@ services:
   - type: web
     name: restaurant-booking-api
     runtime: python
+    pythonVersion: "3.11"
     region: singapore
     plan: free
 
