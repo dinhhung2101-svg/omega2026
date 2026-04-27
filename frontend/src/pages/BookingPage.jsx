@@ -24,9 +24,10 @@ function formatTime(dt) {
 }
 
 /** Booking đang hiệu lực trên bàn trong ngày đang xem (ưu tiên đã check-in). */
-function activeBookingForTable(tableId, dayBookings) {
+function activeBookingForTable(table, dayBookings) {
+  if (!table?.active_booking_id) return null;
   const list = dayBookings.filter(
-    b => b.table_id === tableId && (b.status === "reserved" || b.status === "checked_in")
+    b => b.id === table.active_booking_id && (b.status === "reserved" || b.status === "checked_in")
   );
   return list.find(b => b.status === "checked_in") || list.find(b => b.status === "reserved") || null;
 }
@@ -355,7 +356,7 @@ function WalkInModal({ open, onClose, table, onSuccess }) {
 }
 
 // ─── Table Detail Modal ───
-function TableDetailModal({ open, onClose, table, areas, onAction, onBookTable, onWalkIn, onMerge, onUnmerge, onTransfer }) {
+function TableDetailModal({ open, onClose, table, areas, tables, onAction, onBookTable, onWalkIn, onMerge, onUnmerge, onTransfer }) {
   const { user } = useAuth();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -371,7 +372,7 @@ function TableDetailModal({ open, onClose, table, areas, onAction, onBookTable, 
     if (!open || !table) return;
     setLoading(true);
     api.getActiveBookings().then(list => {
-      setBookings(list.filter(b => b.table_id === table.id));
+      setBookings(list.filter(b => b.id === table.active_booking_id));
     }).catch(() => {}).finally(() => setLoading(false));
   }, [open, table]);
 
@@ -534,21 +535,18 @@ function TableDetailModal({ open, onClose, table, areas, onAction, onBookTable, 
                 <Button onClick={onMerge} variant="secondary" className="flex-1">
                   <GitMerge className="w-4 h-4" /> Gộp bàn
                 </Button>
+                {/* Tách bàn (detach) nếu booking đang gộp >= 2 bàn */}
+                {tables && tables.filter(t => t.active_booking_id && t.active_booking_id === table.active_booking_id).length > 1 && (
+                  <Button onClick={onUnmerge} variant="secondary" className="flex-1">
+                    <GitBranch className="w-4 h-4" /> Tách bàn
+                  </Button>
+                )}
               </>
             )}
           </>
         )}
 
-        {table.status === "merged" && currentBooking && isManager && (
-          <>
-            <Button onClick={handleClose} loading={actionLoading} variant="primary" className="flex-1">
-              <CheckCircle2 className="w-4 h-4" /> Đóng bàn
-            </Button>
-            <Button onClick={onUnmerge} variant="secondary" className="flex-1">
-              <GitBranch className="w-4 h-4" /> Tách bàn
-            </Button>
-          </>
-        )}
+        {/* Status merged không còn là điều kiện để tách bàn trong mô hình 1 booking - nhiều bàn */}
       </div>
 
       {/* Confirm Cancel */}
@@ -571,7 +569,6 @@ function TableDetailModal({ open, onClose, table, areas, onAction, onBookTable, 
 // ─── Merge / Transfer Modal ───
 function MergeTransferModal({ open, onClose, type, table, tables, onSuccess }) {
   const [selected, setSelected] = useState(null);
-  const [guestCount, setGuestCount] = useState(4);
   const [loading, setLoading] = useState(false);
   const isMerge = type === "merge";
 
@@ -579,7 +576,8 @@ function MergeTransferModal({ open, onClose, type, table, tables, onSuccess }) {
 
   const availableTables = tables.filter(t => {
     if (t.id === table?.id) return false;
-    if (type === "unmerge") return t.status === "empty";
+    // "unmerge" ở UI = detach bàn khỏi booking gộp
+    if (type === "unmerge") return !!table?.active_booking_id && t.active_booking_id === table.active_booking_id;
     return t.status === "empty" && t.area_id === table?.area_id;
   });
 
@@ -589,45 +587,34 @@ function MergeTransferModal({ open, onClose, type, table, tables, onSuccess }) {
     try {
       if (isMerge) await api.mergeTables(selected.id, table.id);
       else if (type === "transfer") await api.transferTable(table.id, selected.id);
-      else await api.unmergeTable(table.id, selected.id, guestCount);
+      else await api.detachTable(selected.id);
       onSuccess(); onClose();
     } catch (err) { alert(err.message); }
     finally { setLoading(false); }
   };
 
   if (!open || !table) return null;
-  const title = isMerge ? `Gộp bàn trống vào '${table.name}'` : type === "transfer" ? `Chuyển bàn '${table.name}' sang...` : `Tách bàn '${table.name}' ra...`;
+  const title = isMerge
+    ? `Gộp bàn trống vào '${table.name}'`
+    : type === "transfer"
+      ? `Chuyển bàn '${table.name}' sang...`
+      : `Tách bàn khỏi booking '${table.name}'`;
 
   const listHint =
     isMerge
       ? <>Chọn bàn trống cùng khu vực để gộp thêm cho bàn <strong>{table.name}</strong>:</>
       : type === "transfer"
         ? <>Chọn bàn trống để chuyển khách từ <strong>{table.name}</strong> sang:</>
-        : <>Chọn bàn trống để tách khách ra:</>;
+        : <>Chọn bàn đang cùng booking để tách ra (bàn được tách sẽ về trạng thái trống):</>;
 
-  const emptyHint =
-    isMerge
-      ? "Hiện không còn bàn trống nào cùng khu vực để gộp."
-      : "Không có bàn trống phù hợp.";
+  const emptyHint = isMerge
+    ? "Hiện không còn bàn trống nào cùng khu vực để gộp."
+    : type === "transfer"
+      ? "Không có bàn trống phù hợp."
+      : "Hiện booking này chỉ có 1 bàn, không có gì để tách.";
 
   return (
     <Modal open={open} onClose={onClose} title={title} size="lg">
-      {type === "unmerge" && (
-        <div className="mb-4">
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Số khách ngồi bàn mới <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="number"
-            value={guestCount}
-            min={1}
-            max={50}
-            onChange={e => setGuestCount(parseInt(e.target.value, 10) || 1)}
-            className="w-32 rounded-lg border px-3 py-2 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-          />
-        </div>
-      )}
-
       <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">{listHint}</p>
 
       {availableTables.length === 0 ? (
@@ -717,13 +704,13 @@ const [selectedDate, setSelectedDate] = useState(() => formatLocalDateString(new
     if (msg.type === "table_update" && msg.tables) {
       setTables(prev => prev.map(t => {
         const updated = msg.tables.find(u => u.id === t.id);
-        return updated ? { ...t, status: updated.status, merged_into_id: updated.merged_into_id } : t;
+        return updated ? { ...t, status: updated.status, merged_into_id: updated.merged_into_id, active_booking_id: updated.active_booking_id } : t;
       }));
       setAreas(prev => prev.map(area => ({
         ...area,
         tables: area.tables.map(t => {
           const updated = msg.tables.find(u => u.id === t.id);
-          return updated ? { ...t, status: updated.status, merged_into_id: updated.merged_into_id } : t;
+          return updated ? { ...t, status: updated.status, merged_into_id: updated.merged_into_id, active_booking_id: updated.active_booking_id } : t;
         }),
       })));
     }
@@ -820,15 +807,16 @@ const [selectedDate, setSelectedDate] = useState(() => formatLocalDateString(new
               {area.tables.map(table => {
                 const effectiveStatus = table.is_blocked ? "blocked" : table.status;
                 const cfg = STATUS_CONFIG[effectiveStatus] || STATUS_CONFIG.empty;
-                const dayBooking = activeBookingForTable(table.id, dayBookings);
+                const dayBooking = activeBookingForTable(table, dayBookings);
                 const mergedIntoTable = table.merged_into_id ? tables.find(t => t.id === table.merged_into_id) : null;
                 const mergedTablesList = table.status === "merged" ? tables.filter(t => t.merged_into_id === table.id) : [];
                 const isAbsorbed = !!table.merged_into_id;
-                const showBookingBlock = dayBooking && !isAbsorbed;
+                // UI yêu cầu các bàn trong booking gộp đều hiển thị thông tin khách như nhau
+                const showBookingBlock = !!dayBooking;
                 return (
                   <div key={table.id}
                     onClick={() => handleTableClick(table)}
-                    className={`relative flex min-h-[7.5rem] flex-col rounded-xl border-2 p-2.5 transition-all group ${cfg.hover} ${cfg.color.replace("bg-", "border-").replace("-50", "-200").replace("dark:", "dark:border-").replace("dark:bg-", "dark:border-").replace(/-\[30\]/, "-600")} border-gray-200 dark:border-gray-700 ${isAbsorbed ? "opacity-50" : ""}`}
+                    className={`relative flex min-h-[7.5rem] flex-col rounded-xl border-2 p-2.5 transition-all group ${cfg.hover} ${cfg.color.replace("bg-", "border-").replace("-50", "-200").replace("dark:", "dark:border-").replace("dark:bg-", "dark:border-").replace(/-\[30\]/, "-600")} border-gray-200 dark:border-gray-700`}
                     title={`${table.name} - ${cfg.label}${mergedIntoTable ? ` (gộp vào ${mergedIntoTable.name})` : ""}`}
                   >
                     {/* Badge: khóa cả ngày */}

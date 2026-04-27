@@ -114,6 +114,8 @@ export const api = {
     request("/api/bookings/merge", { method: "POST", body: JSON.stringify({ from_table_id: fromId, to_table_id: toId }) }),
   transferTable: (fromId, toId) =>
     request("/api/bookings/transfer", { method: "POST", body: JSON.stringify({ from_table_id: fromId, to_table_id: toId }) }),
+  detachTable: (tableId) =>
+    request("/api/bookings/detach", { method: "POST", body: JSON.stringify({ table_id: tableId }) }),
   unmergeTable: (tableId, newTableId, guestCount) =>
     request("/api/bookings/unmerge", {
       method: "POST",

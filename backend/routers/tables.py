@@ -148,6 +148,8 @@ def list_tables_with_areas(
                 "name": t.name,
                 "capacity": t.capacity,
                 "status": t.status,
+                "merged_into_id": t.merged_into_id,
+                "active_booking_id": t.active_booking_id,
             }
             # Gắn thông tin khóa
             if block_date and target_date:

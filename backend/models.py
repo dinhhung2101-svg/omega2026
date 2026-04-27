@@ -70,11 +70,14 @@ class Table(Base):
     capacity = Column(Integer, default=4)              # Số ghế tối đa
     status = Column(String(20), default=TableStatus.EMPTY.value)
     merged_into_id = Column(Integer, ForeignKey("tables.id"), nullable=True)  # Bàn này đã gộp vào bàn nào (nếu có)
+    # Khi gộp bàn, nhiều bàn có thể cùng thuộc 1 booking đang hoạt động.
+    active_booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     area = relationship("Area", back_populates="tables")
     bookings = relationship("Booking", back_populates="table")
     merged_into = relationship("Table", remote_side=[id], foreign_keys=[merged_into_id], backref="merged_tables")
+    active_booking = relationship("Booking", foreign_keys=[active_booking_id])
 
 
 # ──────────────────────────────────────────────

@@ -30,7 +30,18 @@ def _table_out(table: Table) -> dict:
         "area_id": table.area_id,
         "status": table.status,
         "merged_into_id": table.merged_into_id,
+        "active_booking_id": table.active_booking_id,
     }
+
+
+def _clear_tables_for_booking(db: Session, booking_id: int) -> list[Table]:
+    """Clear toàn bộ bàn đang gắn với booking_id (khi close/cancel)."""
+    tables = db.query(Table).filter(Table.active_booking_id == booking_id).all()
+    for t in tables:
+        t.status = "empty"
+        t.merged_into_id = None
+        t.active_booking_id = None
+    return tables
 
 
 def _booking_out(b: Booking) -> BookingOut:
@@ -246,14 +257,18 @@ def create_booking(
         customer_id=customer_id,   # gán customer_id đã xử lý ở trên
     )
     db.add(booking)
+    db.flush()  # để lấy booking.id trước khi commit
 
     # Đánh dấu các bàn gộp là reserved
     for mtable in merged_tables:
         mtable.status = "reserved"
+        mtable.active_booking_id = booking.id
+        mtable.merged_into_id = table.id
 
     # Đánh dấu bàn chính là reserved
     # Nếu có bàn gộp, đánh dấu bàn chính sẽ là merged khi check-in
     table.status = "reserved"
+    table.active_booking_id = booking.id
 
     db.commit()
     db.refresh(booking)
@@ -306,7 +321,7 @@ def check_in_booking(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Khách đến nhà hàng → bàn chính chuyển 'merged', các bàn gộp chuyển 'empty'."""
+    """Khách đến nhà hàng → bàn chính chuyển 'occupied', các bàn gộp (nếu có) cũng 'occupied' và cùng 1 booking."""
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Không tìm thấy booking")
@@ -326,25 +341,26 @@ def check_in_booking(
         Booking.customer_phone == booking.customer_phone
     ).all()
 
-    # Nếu tìm được bàn gộp → bàn chính thành merged, bàn gộp thành empty
+    # Nếu tìm được bàn gộp → tất cả bàn trong nhóm đều occupied và trỏ về cùng booking
     is_merged_booking = len(merged_tables) > 0
 
-    table.status = "merged" if is_merged_booking else "occupied"
+    table.status = "occupied"
     booking.status = "checked_in"
     booking.check_in_time = datetime.now(timezone.utc)
+    table.active_booking_id = booking.id
 
-    # Các bàn gộp → empty
+    # Các bàn gộp → occupied + cùng active_booking_id + đánh dấu gộp vào bàn chính.
     for mtable in merged_tables:
-        mtable.status = "empty"
-        # Cập nhật booking của bàn gộp
+        mtable.status = "occupied"
+        mtable.merged_into_id = table.id
+        mtable.active_booking_id = booking.id
+        # Nếu có booking reserved trên bàn phụ, cancel nó để backend chỉ còn 1 booking hoạt động
         mbooking = db.query(Booking).filter(
             Booking.table_id == mtable.id,
             Booking.status == "reserved"
         ).first()
         if mbooking:
-            mbooking.status = "checked_in"
-            mbooking.table_id = table.id  # Chuyển booking sang bàn chính
-            mbooking.check_in_time = datetime.now(timezone.utc)
+            mbooking.status = "cancelled"
 
     # Tạo lịch sử tiêu dùng
     visit = VisitHistory(
@@ -431,6 +447,8 @@ def walk_in_booking(
     )
     db.add(booking)
     table.status = "occupied"
+    db.flush()  # lấy booking.id
+    table.active_booking_id = booking.id
 
     # Tăng tổng lượt đến
     customer.total_visits = (customer.total_visits or 0) + 1
@@ -469,6 +487,11 @@ class UnmergeRequest(BaseModel):
     guest_count: int = Field(..., ge=1, le=50)
 
 
+class DetachTableRequest(BaseModel):
+    """Tách 1 bàn ra khỏi booking gộp và trả về trạng thái trống."""
+    table_id: int
+
+
 # ──────────────────────────────────────────────
 # ĐÓNG BÀN (Checkout)
 # ──────────────────────────────────────────────
@@ -487,24 +510,9 @@ def close_booking(
         raise HTTPException(status_code=400, detail="Booking này đã đóng hoặc hủy")
 
     table = booking.table
-    was_merged = table.status == "merged"
-
-    # Tìm các bàn gộp nếu là bàn merged
-    merged_tables = []
-    if was_merged:
-        merged_tables = db.query(Table).filter(
-            Table.merged_into_id == table.id
-        ).all()
-
-    table.status = "empty"
-    table.merged_into_id = None
+    tables_cleared = _clear_tables_for_booking(db, booking.id)
     booking.status = "completed"
     booking.closed_time = datetime.now(timezone.utc)
-
-    # Reset các bàn gộp về empty
-    for mtable in merged_tables:
-        mtable.status = "empty"
-        mtable.merged_into_id = None
 
     # Cập nhật lịch sử tiêu dùng với số tiền
     visit = db.query(VisitHistory).filter(
@@ -526,16 +534,14 @@ def close_booking(
 
     _log(db, current_user.id, "Đóng bàn",
          f"Đóng bàn '{table.name}' của '{booking.customer_name}', doanh thu: {req.total_amount:,}đ" +
-         (f" (gộp {len(merged_tables)} bàn)" if was_merged else ""))
+         (f" (gộp {max(0, len(tables_cleared) - 1)} bàn)" if len(tables_cleared) > 1 else ""))
 
     from backend.events import event_store as _es
-    tables_changed = [_table_out(table)]
-    for mtable in merged_tables:
-        tables_changed.append(_table_out(mtable))
+    tables_changed = [_table_out(t) for t in tables_cleared] or [_table_out(table)]
     _es.broadcast({"type": "table_update", "tables": tables_changed})
 
     out = _booking_out(booking)
-    out.merged_table_ids = [t.id for t in merged_tables]
+    out.merged_table_ids = [t.id for t in tables_cleared if t.id != table.id]
     return out
 
 
@@ -557,23 +563,8 @@ def cancel_booking(
         raise HTTPException(status_code=400, detail="Booking này đã hoàn thành hoặc hủy trước đó")
 
     table = booking.table
-    was_merged = table.status == "merged"
-
-    # Tìm các bàn gộp nếu là bàn merged
-    merged_tables = []
-    if was_merged:
-        merged_tables = db.query(Table).filter(
-            Table.merged_into_id == table.id
-        ).all()
-
-    table.status = "empty"
-    table.merged_into_id = None
+    tables_cleared = _clear_tables_for_booking(db, booking.id)
     booking.status = "cancelled"
-
-    # Reset các bàn gộp về empty
-    for mtable in merged_tables:
-        mtable.status = "empty"
-        mtable.merged_into_id = None
 
     db.commit()
 
@@ -581,9 +572,7 @@ def cancel_booking(
          f"Hủy booking #{booking.id} của '{booking.customer_name}' - Lý do: {req.reason or 'Không rõ'}")
 
     from backend.events import event_store as _es
-    tables_changed = [_table_out(table)]
-    for mtable in merged_tables:
-        tables_changed.append(_table_out(mtable))
+    tables_changed = [_table_out(t) for t in tables_cleared] or [_table_out(table)]
     _es.broadcast({"type": "table_update", "tables": tables_changed})
 
     return {"message": "Đã hủy booking"}
@@ -616,9 +605,16 @@ def merge_tables(
     if from_table.area_id != to_table.area_id:
         raise HTTPException(status_code=400, detail="Hai bàn phải cùng khu vực mới gộp được")
 
-    # Cập nhật mối quan hệ merged (bàn trống gộp vào bàn chính)
+    # Bàn gộp cùng thuộc 1 booking đang hoạt động với bàn chính
+    if not to_table.active_booking_id:
+        raise HTTPException(status_code=400, detail="Bàn chính chưa gắn booking đang hoạt động")
+
     from_table.merged_into_id = to_table.id
-    # to_table giữ nguyên trạng thái (occupied hoặc merged), không cần đổi
+    from_table.active_booking_id = to_table.active_booking_id
+    # UI yêu cầu 2 bàn đều xem như có khách
+    from_table.status = "occupied"
+    # Bàn chính giữ occupied
+    to_table.status = "occupied"
 
     db.commit()
 
@@ -787,3 +783,39 @@ def unmerge_table(
         "new_table": _table_out(new_table),
         "merged_table": _table_out(merged_table)
     }
+
+
+# ──────────────────────────────────────────────
+# TÁCH BÀN (Detach khỏi booking gộp)
+# ──────────────────────────────────────────────
+@router.post("/detach")
+def detach_table(
+    req: DetachTableRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "manager"))
+):
+    """Tách 1 bàn ra khỏi booking gộp và trả về trạng thái trống.
+
+    - Bàn cần tách phải đang có active_booking_id
+    - Sau khi tách: bàn -> empty, active_booking_id=None, merged_into_id=None
+    """
+    table = db.query(Table).filter(Table.id == req.table_id).first()
+    if not table:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bàn")
+    if not table.active_booking_id:
+        raise HTTPException(status_code=400, detail="Bàn này không thuộc booking nào để tách")
+
+    old_booking_id = table.active_booking_id
+    table.status = "empty"
+    table.active_booking_id = None
+    table.merged_into_id = None
+
+    db.commit()
+
+    _log(db, current_user.id, "Tách bàn",
+         f"Tách bàn '{table.name}' khỏi booking #{old_booking_id}")
+
+    from backend.events import event_store as _es
+    _es.broadcast({"type": "table_update", "tables": [_table_out(table)]})
+
+    return {"message": f"Đã tách bàn '{table.name}' và trả về trạng thái trống"}

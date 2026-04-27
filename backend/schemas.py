@@ -82,6 +82,7 @@ class TableUpdate(BaseModel):
     capacity: Optional[int] = None
     status: Optional[str] = None
     merged_into_id: Optional[int] = None
+    active_booking_id: Optional[int] = None
 
 
 class TableOut(BaseModel):
@@ -92,6 +93,7 @@ class TableOut(BaseModel):
     capacity: int
     status: str
     merged_into_id: Optional[int] = None
+    active_booking_id: Optional[int] = None
 
     class Config:
         from_attributes = True

@@ -40,6 +40,17 @@ async def lifespan(app: FastAPI):
     # 1. Tạo tất cả bảng (chạy 1 lần, không lỗi nếu đã có)
     Base.metadata.create_all(bind=engine)
 
+    # 1.1. Migration nhẹ cho DB cũ (SQLite) — thêm cột active_booking_id nếu thiếu
+    try:
+        with engine.begin() as conn:
+            rows = conn.exec_driver_sql("PRAGMA table_info(tables)").fetchall()
+            cols = {r[1] for r in rows}  # (cid, name, type, notnull, dflt_value, pk)
+            if "active_booking_id" not in cols:
+                conn.exec_driver_sql("ALTER TABLE tables ADD COLUMN active_booking_id INTEGER")
+    except Exception as e:
+        # Không chặn startup nếu migration fail (VD: DB khác SQLite)
+        print(f"⚠️ DB migration warning: {e}")
+
     db = SessionLocal()
     try:
         # 2. Tạo admin mặc định nếu chưa có
