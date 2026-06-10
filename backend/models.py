@@ -75,9 +75,9 @@ class Table(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     area = relationship("Area", back_populates="tables")
-    bookings = relationship("Booking", back_populates="table")
+    bookings = relationship("Booking", back_populates="table", foreign_keys="Booking.table_id")
     merged_into = relationship("Table", remote_side=[id], foreign_keys=[merged_into_id], backref="merged_tables")
-    active_booking = relationship("Booking", foreign_keys=[active_booking_id])
+    active_booking = relationship("Booking", foreign_keys=[active_booking_id], uselist=False)
 
 
 # ──────────────────────────────────────────────
@@ -118,7 +118,7 @@ class Booking(Base):
     closed_time = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    table = relationship("Table", back_populates="bookings")
+    table = relationship("Table", back_populates="bookings", foreign_keys=[table_id])
     booked_by_user = relationship("User", back_populates="bookings")
 
 
