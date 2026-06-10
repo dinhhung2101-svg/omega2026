@@ -356,7 +356,7 @@ function WalkInModal({ open, onClose, table, onSuccess }) {
 }
 
 // ─── Table Detail Modal ───
-function TableDetailModal({ open, onClose, table, areas, tables, onAction, onBookTable, onWalkIn, onMerge, onUnmerge, onTransfer }) {
+function TableDetailModal({ open, onClose, table, areas, tables, dayBookings = [], onAction, onBookTable, onWalkIn, onMerge, onUnmerge, onTransfer }) {
   const { user } = useAuth();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -376,7 +376,13 @@ function TableDetailModal({ open, onClose, table, areas, tables, onAction, onBoo
     }).catch(() => {}).finally(() => setLoading(false));
   }, [open, table]);
 
-  const currentBooking = bookings.find(b => b.status === "reserved" || b.status === "checked_in");
+  const currentBooking =
+    bookings.find(b => b.status === "reserved" || b.status === "checked_in") ||
+    (table?.active_booking_id
+      ? dayBookings.find(
+          b => b.id === table.active_booking_id && (b.status === "reserved" || b.status === "checked_in")
+        )
+      : null);
 
   const handleCheckIn = async () => {
     if (!currentBooking) return;
@@ -658,6 +664,7 @@ export default function BookingPage() {
   const [areas, setAreas] = useState([]);
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [searchQ, setSearchQ] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
 function formatLocalDateString(d) {
@@ -679,14 +686,65 @@ const [selectedDate, setSelectedDate] = useState(() => formatLocalDateString(new
 
   const isToday = selectedDate === formatLocalDateString(new Date());
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const cacheKeyForDate = useCallback((d) => `tablesWithAreas:${d}`, []);
+
+  const hydrateFromCache = useCallback((d) => {
     try {
-      const data = await api.getTablesWithAreas(selectedDate);
+      const raw = localStorage.getItem(cacheKeyForDate(d));
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.areas)) return false;
+      setAreas(parsed.areas);
+      setTables(
+        parsed.areas.flatMap((a) => (a.tables || []).map((t) => ({ ...t, area_name: a.name })))
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }, [cacheKeyForDate]);
+
+  const persistCache = useCallback((d, nextAreas) => {
+    try {
+      localStorage.setItem(cacheKeyForDate(d), JSON.stringify({ ts: Date.now(), areas: nextAreas }));
+    } catch {
+      // ignore storage quota / private mode
+    }
+  }, [cacheKeyForDate]);
+
+  const loadData = useCallback(async () => {
+    setLoadError("");
+
+    // Hiển thị dữ liệu gần nhất (nếu có) để không trắng màn hình
+    const hadCache = hydrateFromCache(selectedDate);
+    setLoading(!hadCache);
+
+    try {
+      let data;
+      let lastErr;
+      // Retry nhẹ 1 lần để chịu được mạng chập chờn/khởi động backend
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          data = await api.getTablesWithAreas({ timeoutMs: 6000, block_date: selectedDate });
+          lastErr = null;
+          break;
+        } catch (e) {
+          lastErr = e;
+          // backoff ngắn
+          await new Promise((r) => setTimeout(r, attempt === 0 ? 300 : 800));
+        }
+      }
+      if (lastErr) throw lastErr;
+
       setAreas(data);
       setTables(data.flatMap(a => a.tables.map(t => ({ ...t, area_name: a.name }))));
-    } catch {}
-    finally { setLoading(false); }
+      persistCache(selectedDate, data);
+    } catch (e) {
+      setLoadError(e?.message || "Không tải được sơ đồ bàn. Vui lòng thử lại.");
+      // Không xóa dữ liệu hiện có; nếu không có cache thì areas vẫn rỗng → sẽ hiện UI lỗi
+    } finally {
+      setLoading(false);
+    }
   }, [selectedDate]);
 
   const loadDayBookings = useCallback(async () => {
@@ -723,7 +781,8 @@ const [selectedDate, setSelectedDate] = useState(() => formatLocalDateString(new
       alert(`🔒 Bàn '${table.name}' đã bị khóa vào ngày này.\nLý do: ${reason}`);
       return;
     }
-    setSelectedTable(table);
+    const fresh = tables.find(t => t.id === table.id) || table;
+    setSelectedTable(fresh);
     setShowTableDetail(true);
   };
 
@@ -745,6 +804,23 @@ const [selectedDate, setSelectedDate] = useState(() => formatLocalDateString(new
 
   return (
     <div className="space-y-5">
+      {loadError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm">
+            <span className="font-semibold">Không tải được sơ đồ bàn.</span>{" "}
+            <span className="opacity-90">{loadError}</span>
+            {areas.length > 0 && (
+              <span className="ml-1 opacity-80">
+                (Đang hiển thị dữ liệu gần nhất.)
+              </span>
+            )}
+          </div>
+          <Button onClick={loadData} variant="secondary" className="self-start sm:self-auto">
+            Thử lại
+          </Button>
+        </div>
+      )}
+
       {/* Header with Date Picker */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
@@ -866,10 +942,14 @@ const [selectedDate, setSelectedDate] = useState(() => formatLocalDateString(new
                             <Users className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                             <span>{dayBooking.guest_count} khách</span>
                           </div>
-                          {dayBooking.status === "reserved" && (
+                          {(dayBooking.status === "reserved" || dayBooking.status === "checked_in") && (
                             <div className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
                               <Clock className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
-                              <span>Dự kiến {formatTime(dayBooking.booking_time)}</span>
+                              <span>
+                                {dayBooking.status === "checked_in"
+                                  ? `Đến lúc ${formatTime(dayBooking.check_in_time || dayBooking.booking_time)}`
+                                  : `Dự kiến ${formatTime(dayBooking.booking_time)}`}
+                              </span>
                             </div>
                           )}
                         </div>
@@ -882,10 +962,17 @@ const [selectedDate, setSelectedDate] = useState(() => formatLocalDateString(new
           </div>
         ))}
 
-        {filteredAreas.length === 0 && (
+        {filteredAreas.length === 0 && !loadError && (
           <EmptyState
             title="Không tìm thấy bàn"
             description="Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm"
+          />
+        )}
+
+        {filteredAreas.length === 0 && loadError && (
+          <EmptyState
+            title="Không tải được sơ đồ bàn"
+            description="Vui lòng kiểm tra kết nối/backend và bấm Thử lại."
           />
         )}
       </div>
@@ -919,6 +1006,7 @@ const [selectedDate, setSelectedDate] = useState(() => formatLocalDateString(new
         table={selectedTable}
         tables={tables}
         areas={areas}
+        dayBookings={dayBookings}
         onAction={() => { loadData(); loadDayBookings(); }}
         onBookTable={() => {
           setShowTableDetail(false);

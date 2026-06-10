@@ -12,16 +12,30 @@ async function request(endpoint, options = {}) {
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
   let res;
+  const { timeoutMs, ...fetchOptions } = options;
+  const controller = fetchOptions.signal ? null : new AbortController();
+  const signal = fetchOptions.signal ?? controller?.signal;
+  const ms = typeof timeoutMs === "number" ? timeoutMs : 0;
+  let timeoutId;
+  if (ms > 0 && controller) {
+    timeoutId = window.setTimeout(() => controller.abort(), ms);
+  }
   try {
     res = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
+      ...fetchOptions,
       headers,
+      signal,
     });
   } catch {
+    if (timeoutId) window.clearTimeout(timeoutId);
+    if (signal?.aborted) {
+      throw new Error("Kết nối đến máy chủ bị quá thời gian. Vui lòng thử lại.");
+    }
     throw new Error(
       "Không kết nối được máy chủ. Hãy chạy backend (python main.py, cổng 8000) và thử lại. Nếu dùng URL tùy chỉnh, kiểm tra biến VITE_API_URL."
     );
   }
+  if (timeoutId) window.clearTimeout(timeoutId);
 
   if (res.status === 401) {
     localStorage.removeItem("token");
@@ -85,7 +99,10 @@ export const api = {
   toggleUserActive: (id) => request(`/api/auth/users/${id}/toggle-active`, { method: "PUT" }),
 
   // Tables & Areas
-  getTablesWithAreas: () => request("/api/tables-with-areas"),
+  getTablesWithAreas: ({ timeoutMs, block_date } = {}) => {
+    const qs = block_date ? `?block_date=${encodeURIComponent(block_date)}` : "";
+    return request(`/api/tables-with-areas${qs}`, { timeoutMs });
+  },
   getTables: (areaId) => request(`/api/tables${areaId ? `?area_id=${areaId}` : ""}`),
   createArea: (data) => request("/api/areas", { method: "POST", body: JSON.stringify(data) }),
   updateArea: (id, data) => request(`/api/areas/${id}`, { method: "PUT", body: JSON.stringify(data) }),

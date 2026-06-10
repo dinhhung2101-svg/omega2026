@@ -18,6 +18,10 @@ from datetime import time as time_type
 
 router = APIRouter(prefix="/api/bookings", tags=["📋 Booking"])
 
+# Join rõ ràng — tránh AmbiguousForeignKeysError khi Table có thêm active_booking_id → bookings.id
+_BOOKING_TABLE_JOIN = (Table, Booking.table_id == Table.id)
+_TABLE_AREA_JOIN = (Area, Table.area_id == Area.id)
+
 
 # ──────────────────────────────────────────────
 # HELPERS
@@ -129,7 +133,7 @@ def list_bookings(
     Danh sách booking, lọc theo ngày / trạng thái / bàn.
     date format: YYYY-MM-DD
     """
-    query = db.query(Booking).join(Table).join(Area)
+    query = db.query(Booking).join(*_BOOKING_TABLE_JOIN).join(*_TABLE_AREA_JOIN)
 
     if date:
         query = query.filter(
@@ -156,7 +160,7 @@ def bookings_by_date(
     except ValueError:
         raise HTTPException(status_code=400, detail="Định dạng ngày không hợp lệ, dùng YYYY-MM-DD")
 
-    bookings = db.query(Booking).join(Table).join(Area).filter(
+    bookings = db.query(Booking).join(*_BOOKING_TABLE_JOIN).join(*_TABLE_AREA_JOIN).filter(
         func.date(Booking.booking_time) == target
     ).order_by(Booking.booking_time.asc()).all()
 
@@ -171,7 +175,7 @@ def list_active_bookings(
     """Danh sách booking đang hoạt động (reserved + checked_in)."""
     bookings = db.query(Booking).filter(
         Booking.status.in_(["reserved", "checked_in"])
-    ).join(Table).join(Area).order_by(Booking.booking_time.desc()).all()
+    ).join(*_BOOKING_TABLE_JOIN).join(*_TABLE_AREA_JOIN).order_by(Booking.booking_time.desc()).all()
     return [_booking_out(b) for b in bookings]
 
 
